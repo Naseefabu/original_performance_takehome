@@ -48,11 +48,22 @@ class KernelBuilder:
     def debug_info(self):
         return DebugInfo(scratch_map=self.scratch_debug)
 
-    def build(self, slots: list[tuple[Engine, tuple]], vliw: bool = False):
-        # Simple slot packing that just uses one slot per instruction bundle
+    # def build(self, slots: list[tuple[Engine, tuple]], vliw: bool = False):
+    #     # Simple slot packing that just uses one slot per instruction bundle
+    #     instrs = []
+    #     for engine, slot in slots:
+    #         instrs.append({engine: [slot]})
+    #     return instrs
+
+    def build(self, slots):
+        # Slot placking that uses more than 1 slot per engine
         instrs = []
-        for engine, slot in slots:
-            instrs.append({engine: [slot]})
+        for item in slots:
+            if isinstance(item, dict):
+                instrs.append(item)
+            else:
+                engine, slot = item
+                instrs.append({engine: [slot]})
         return instrs
 
     def add(self, engine, slot):
@@ -84,6 +95,12 @@ class KernelBuilder:
             slots.append(("debug", ("compare", val_hash_addr, (round, i, "hash_stage", hi))))
 
         return slots
+
+# {"alu": [ ... up to 12 slots ... ],
+#  "valu": [ ... up to 6 slots ... ]} -> vector ops (8 elements each)
+#  "load": [ ... up to 2 slots ... ],
+#  "store": [ ... up to 2 slots ... ],
+#  "flow": [ ... 1 slot ... ]}        -> control flow, including jumps and pauses
 
     def build_kernel(
         self, forest_height: int, n_nodes: int, batch_size: int, rounds: int
@@ -135,7 +152,11 @@ class KernelBuilder:
             for i in range(batch_size):
                 i_const = self.scratch_const(i)
                 # idx = mem[inp_indices_p + i]
-                body.append(("alu", ("+", tmp_addr, self.scratch["inp_indices_p"], i_const)))
+                body.append({
+                    "alu": [
+                        ("+", tmp_addr, self.scratch["inp_indices_p"], i_const)
+                    ]
+                })
                 body.append(("load", ("load", tmp_idx, tmp_addr)))
                 body.append(("debug", ("compare", tmp_idx, (round, i, "idx"))))
                 # val = mem[inp_values_p + i]
@@ -176,9 +197,9 @@ class KernelBuilder:
 BASELINE = 147734
 
 def do_kernel_test(
-    forest_height: int,
-    rounds: int,
-    batch_size: int,
+    forest_height: int, # 10 = 2047 nodes
+    rounds: int,        # 16    
+    batch_size: int,    # 256  so only 256 indexes ? 
     seed: int = 123,
     trace: bool = False,
     prints: bool = False,
