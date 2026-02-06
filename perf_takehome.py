@@ -149,6 +149,19 @@ class KernelBuilder:
         
         tmp_addr_idx = self.alloc_scratch("tmp_addr_idx")
         tmp_addr_idx_1 = self.alloc_scratch("tmp_addr_idx_1")
+        tmp_addr_idx_2 = self.alloc_scratch("tmp_addr_idx_2")
+        tmp_addr_idx_3 = self.alloc_scratch("tmp_addr_idx_3")
+        
+        # For each round and each element in the batch, we do the following:
+
+        # 1. idx = mem[inp_indices_p + i]
+        # 2. val = mem[inp_values_p + i]
+        # 3. node_val = mem[forest_values_p + idx]
+        # 4. val = myhash(val ^ node_val)
+        # 5. idx = 2*idx + (1 if val % 2 == 0 else 2)
+        # 6. idx = 0 if idx >= n_nodes else idx
+        # 7. mem[inp_indices_p + i] = idx
+        # 8. mem[inp_values_p + i] = val
 
         def emit_iter(round, i):
             i_const = self.scratch_const(i)
@@ -158,7 +171,9 @@ class KernelBuilder:
             body.append({
                 "alu": [
                     ("+", tmp_addr_idx, self.scratch["inp_indices_p"], i_const),
+                    ("+", tmp_addr_idx_3, self.scratch["inp_indices_p"], i_const),
                     ("+", tmp_addr_idx_1, self.scratch["inp_values_p"], i_const),
+                    ("+", tmp_addr_idx_2, self.scratch["inp_values_p"], i_const),
                 ]
             })
             body.append({
@@ -192,12 +207,10 @@ class KernelBuilder:
             body.append(("debug", ("compare", tmp_idx, (round, i, "wrapped_idx"))))
             
             # 7. mem[inp_indices_p + i] = idx
-            body.append(("alu", ("+", tmp_addr_idx, self.scratch["inp_indices_p"], i_const)))
-            body.append(("store", ("store", tmp_addr_idx, tmp_idx)))
+            body.append(("store", ("store", tmp_addr_idx_3, tmp_idx)))
             
             # 8. mem[inp_values_p + i] = val
-            body.append(("alu", ("+", tmp_addr_idx, self.scratch["inp_values_p"], i_const)))
-            body.append(("store", ("store", tmp_addr_idx, tmp_val)))
+            body.append(("store", ("store", tmp_addr_idx_2, tmp_val)))
 
         for round in range(rounds):
             i = 0
