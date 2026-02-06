@@ -207,10 +207,14 @@ class KernelBuilder:
             body.append(("debug", ("compare", tmp_idx, (round, i, "wrapped_idx"))))
             
             # 7. mem[inp_indices_p + i] = idx
-            body.append(("store", ("store", tmp_addr_idx_3, tmp_idx)))
-            
             # 8. mem[inp_values_p + i] = val
-            body.append(("store", ("store", tmp_addr_idx_2, tmp_val)))
+            body.append({
+                "store": [
+                    ("store", tmp_addr_idx_3, tmp_idx),
+                    ("store", tmp_addr_idx_2, tmp_val),
+                ]
+            })
+            
 
         for round in range(rounds):
             i = 0
