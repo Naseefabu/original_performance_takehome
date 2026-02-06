@@ -156,13 +156,13 @@ class KernelBuilder:
             # 1. idx = mem[inp_indices_p + i]
             # 2. val = mem[inp_values_p + i]
             body.append({
-                "alu": [ # does this have exact below order as well ? on multiple engines for same cycle !?
+                "alu": [
                     ("+", tmp_addr_idx, self.scratch["inp_indices_p"], i_const),
                     ("+", tmp_addr_idx_1, self.scratch["inp_values_p"], i_const),
                 ]
             })
             body.append({
-                "load": [ # does this have exact below order as well ? on multiple engines for same cycle !?
+                "load": [
                     ("load", tmp_idx,   tmp_addr_idx),
                     ("load", tmp_val, tmp_addr_idx_1),
                 ]
