@@ -138,7 +138,14 @@ class KernelBuilder:
 
         # Scalar scratch registers
         tmp_idx = self.alloc_scratch("tmp_idx")
+        tmp_idx_2unroll = self.alloc_scratch("tmp_idx")
+        
+        
         tmp_val = self.alloc_scratch("tmp_val")
+        tmp_val_2unroll = self.alloc_scratch("tmp_val_2unroll")
+
+
+
         tmp_node_val = self.alloc_scratch("tmp_node_val")
         
         tmp_addr_idx = self.alloc_scratch("tmp_addr_idx")
@@ -230,6 +237,10 @@ class KernelBuilder:
                     "store": [
                         ("store", tmp_addr_idx_3, tmp_idx),
                         ("store", tmp_addr_idx_2, tmp_val),
+                    ],
+                    "load": [
+                        ("load", tmp_idx_2unroll, tmp_addr_idx_1_1), # fix
+                        ("load", tmp_val_2unroll, tmp_addr_idx_2unroll_1),
                     ]
                 })
 
@@ -237,43 +248,36 @@ class KernelBuilder:
 
                 # 1. idx = mem[inp_indices_p + i]
                 # 2. val = mem[inp_values_p + i]
-
-                body.append({
-                    "load": [
-                        ("load", tmp_idx,   tmp_addr_idx_1_1),
-                        ("load", tmp_val, tmp_addr_idx_2unroll_1),
-                    ]
-                })
                 
                 # 3. node_val = mem[forest_values_p + idx]
-                body.append(("alu", ("+", tmp_addr_idx_1_1, self.scratch["forest_values_p"], tmp_idx)))
+                body.append(("alu", ("+", tmp_addr_idx_1_1, self.scratch["forest_values_p"], tmp_idx_2unroll)))
                 body.append(("load", ("load", tmp_node_val, tmp_addr_idx_1_1)))
                 body.append(("debug", ("compare", tmp_node_val, (round, i + 1, "node_val"))))
             
                 # 4. val = myhash(val ^ node_val)
-                body.append(("alu", ("^", tmp_val, tmp_val, tmp_node_val)))
-                body.extend(self.build_hash(tmp_val, tmp1, tmp2, round, i + 1))
-                body.append(("debug", ("compare", tmp_val, (round, i + 1, "hashed_val"))))
+                body.append(("alu", ("^", tmp_val_2unroll, tmp_val_2unroll, tmp_node_val)))
+                body.extend(self.build_hash(tmp_val_2unroll, tmp1, tmp2, round, i + 1))
+                body.append(("debug", ("compare", tmp_val_2unroll, (round, i + 1, "hashed_val"))))
             
                 # 5. idx = 2*idx + (1 if val % 2 == 0 else 2)
-                body.append(("alu", ("%", tmp1, tmp_val, two_const)))
+                body.append(("alu", ("%", tmp1, tmp_val_2unroll, two_const)))
                 body.append(("alu", ("==", tmp1, tmp1, zero_const)))
                 body.append(("flow", ("select", tmp3, tmp1, one_const, two_const)))
-                body.append(("alu", ("*", tmp_idx, tmp_idx, two_const)))
-                body.append(("alu", ("+", tmp_idx, tmp_idx, tmp3)))
-                body.append(("debug", ("compare", tmp_idx, (round, i + 1, "next_idx"))))
+                body.append(("alu", ("*", tmp_idx_2unroll, tmp_idx_2unroll, two_const)))
+                body.append(("alu", ("+", tmp_idx_2unroll, tmp_idx_2unroll, tmp3)))
+                body.append(("debug", ("compare", tmp_idx_2unroll, (round, i + 1, "next_idx"))))
 
                 # 6. idx = 0 if idx >= n_nodes else idx
-                body.append(("alu", ("<", tmp1, tmp_idx, self.scratch["n_nodes"])))
-                body.append(("flow", ("select", tmp_idx, tmp1, tmp_idx, zero_const)))
-                body.append(("debug", ("compare", tmp_idx, (round, i + 1, "wrapped_idx"))))
+                body.append(("alu", ("<", tmp1, tmp_idx_2unroll, self.scratch["n_nodes"])))
+                body.append(("flow", ("select", tmp_idx_2unroll, tmp1, tmp_idx_2unroll, zero_const)))
+                body.append(("debug", ("compare", tmp_idx_2unroll, (round, i + 1, "wrapped_idx"))))
                 
                 # 7. mem[inp_indices_p + i] = idx
                 # 8. mem[inp_values_p + i] = val
                 body.append({
                     "store": [
-                        ("store", tmp_addr_idx_3_1, tmp_idx),
-                        ("store", tmp_addr_idx_2unroll_2, tmp_val),
+                        ("store", tmp_addr_idx_3_1, tmp_idx_2unroll),
+                        ("store", tmp_addr_idx_2unroll_2, tmp_val_2unroll),
                     ]
                 })
             if batch_size % 2:
