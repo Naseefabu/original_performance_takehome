@@ -143,9 +143,15 @@ class KernelBuilder:
         
         tmp_addr_idx = self.alloc_scratch("tmp_addr_idx")
         tmp_addr_idx_1 = self.alloc_scratch("tmp_addr_idx_1")
+       
+        tmp_addr_idx_2unroll_1 = self.alloc_scratch("tmp_addr_idx_2unroll_1")
+        tmp_addr_idx_2unroll_2 = self.alloc_scratch("tmp_addr_idx_2unroll_2")
+
         tmp_addr_idx_1_1 = self.alloc_scratch("tmp_addr_idx_1_1")
         tmp_addr_idx_2 = self.alloc_scratch("tmp_addr_idx_2")
         tmp_addr_idx_3 = self.alloc_scratch("tmp_addr_idx_3")
+        tmp_addr_idx_3_1 = self.alloc_scratch("tmp_addr_idx_3_1")
+
         
         # For each round and each element in the batch, we do the following:
 
@@ -177,7 +183,12 @@ class KernelBuilder:
                 body.append({
                     "alu": [
                         ("+", tmp_addr_idx, self.scratch["inp_indices_p"], i_const),
+                        
                         ("+", tmp_addr_idx_1_1, self.scratch["inp_indices_p"], i_const_1),
+                        ("+", tmp_addr_idx_3_1, self.scratch["inp_indices_p"], i_const_1),
+                        ("+", tmp_addr_idx_2unroll_1, self.scratch["inp_values_p"], i_const_1),
+                        ("+", tmp_addr_idx_2unroll_2, self.scratch["inp_values_p"], i_const_1),
+
                         ("+", tmp_addr_idx_3, self.scratch["inp_indices_p"], i_const),
                         ("+", tmp_addr_idx_1, self.scratch["inp_values_p"], i_const),
                         ("+", tmp_addr_idx_2, self.scratch["inp_values_p"], i_const),
@@ -226,24 +237,17 @@ class KernelBuilder:
 
                 # 1. idx = mem[inp_indices_p + i]
                 # 2. val = mem[inp_values_p + i]
-                body.append({
-                    "alu": [
-                        ("+", tmp_addr_idx, self.scratch["inp_indices_p"], i_const_1),
-                        ("+", tmp_addr_idx_3, self.scratch["inp_indices_p"], i_const_1),
-                        ("+", tmp_addr_idx_1, self.scratch["inp_values_p"], i_const_1),
-                        ("+", tmp_addr_idx_2, self.scratch["inp_values_p"], i_const_1),
-                    ]
-                })
+
                 body.append({
                     "load": [
-                        ("load", tmp_idx,   tmp_addr_idx),
-                        ("load", tmp_val, tmp_addr_idx_1),
+                        ("load", tmp_idx,   tmp_addr_idx_1_1),
+                        ("load", tmp_val, tmp_addr_idx_2unroll_1),
                     ]
                 })
                 
                 # 3. node_val = mem[forest_values_p + idx]
-                body.append(("alu", ("+", tmp_addr_idx, self.scratch["forest_values_p"], tmp_idx)))
-                body.append(("load", ("load", tmp_node_val, tmp_addr_idx)))
+                body.append(("alu", ("+", tmp_addr_idx_1_1, self.scratch["forest_values_p"], tmp_idx)))
+                body.append(("load", ("load", tmp_node_val, tmp_addr_idx_1_1)))
                 body.append(("debug", ("compare", tmp_node_val, (round, i + 1, "node_val"))))
             
                 # 4. val = myhash(val ^ node_val)
@@ -268,8 +272,8 @@ class KernelBuilder:
                 # 8. mem[inp_values_p + i] = val
                 body.append({
                     "store": [
-                        ("store", tmp_addr_idx_3, tmp_idx),
-                        ("store", tmp_addr_idx_2, tmp_val),
+                        ("store", tmp_addr_idx_3_1, tmp_idx),
+                        ("store", tmp_addr_idx_2unroll_2, tmp_val),
                     ]
                 })
             if batch_size % 2:
