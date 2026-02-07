@@ -209,7 +209,16 @@ class KernelBuilder:
                 })
                 
                 # 3. node_val = mem[forest_values_p + idx]
-                body.append(("alu", ("+", tmp_addr_idx, self.scratch["forest_values_p"], tmp_idx)))
+                body.append({
+                    "alu": [
+                        ("+", tmp_addr_idx, self.scratch["forest_values_p"], tmp_idx),
+                    ],
+                    "load": [
+                        ("load", tmp_idx_2unroll, tmp_addr_idx_1_1), # fix
+                        ("load", tmp_val_2unroll, tmp_addr_idx_2unroll_1),
+                    ]
+                })
+
                 body.append(("load", ("load", tmp_node_val, tmp_addr_idx)))
                 body.append(("debug", ("compare", tmp_node_val, (round, i, "node_val"))))
             
@@ -234,23 +243,24 @@ class KernelBuilder:
                 # 7. mem[inp_indices_p + i] = idx
                 # 8. mem[inp_values_p + i] = val
                 body.append({
+                    "alu": [
+                        ("+", tmp_addr_idx, self.scratch["forest_values_p"], tmp_idx),
+                        ("+", tmp_addr_idx_1_1, self.scratch["forest_values_p"], tmp_idx_2unroll),
+                    ],
                     "store": [
                         ("store", tmp_addr_idx_3, tmp_idx),
                         ("store", tmp_addr_idx_2, tmp_val),
                     ],
-                    "load": [
-                        ("load", tmp_idx_2unroll, tmp_addr_idx_1_1), # fix
-                        ("load", tmp_val_2unroll, tmp_addr_idx_2unroll_1),
-                    ]
                 })
 
                 ### UNROLL 2 ####
 
-                # 1. idx = mem[inp_indices_p + i]
-                # 2. val = mem[inp_values_p + i]
+                # 1. idx = mem[inp_indices_p + i] -> done
+                # 2. val = mem[inp_values_p + i]  -> done
                 
                 # 3. node_val = mem[forest_values_p + idx]
-                body.append(("alu", ("+", tmp_addr_idx_1_1, self.scratch["forest_values_p"], tmp_idx_2unroll)))
+                # body.append(("alu", ("+", tmp_addr_idx_1_1, self.scratch["forest_values_p"], tmp_idx_2unroll)))
+                
                 body.append(("load", ("load", tmp_node_val, tmp_addr_idx_1_1)))
                 body.append(("debug", ("compare", tmp_node_val, (round, i + 1, "node_val"))))
             
