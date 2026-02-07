@@ -147,6 +147,8 @@ class KernelBuilder:
 
 
         tmp_node_val = self.alloc_scratch("tmp_node_val")
+        tmp_node_val_2unroll = self.alloc_scratch("tmp_node_val_2unroll")
+
         
         tmp_addr_idx = self.alloc_scratch("tmp_addr_idx")
         tmp_addr_idx_1 = self.alloc_scratch("tmp_addr_idx_1")
@@ -214,16 +216,33 @@ class KernelBuilder:
                         ("+", tmp_addr_idx, self.scratch["forest_values_p"], tmp_idx),
                     ],
                     "load": [
-                        ("load", tmp_idx_2unroll, tmp_addr_idx_1_1), # fix
+                        ("load", tmp_idx_2unroll, tmp_addr_idx_1_1), 
                         ("load", tmp_val_2unroll, tmp_addr_idx_2unroll_1),
                     ]
                 })
 
-                body.append(("load", ("load", tmp_node_val, tmp_addr_idx)))
+                body.append({
+                    "alu": [
+                        ("+", tmp_addr_idx_1_1, self.scratch["forest_values_p"], tmp_idx_2unroll),
+                    ],
+                    "load": [
+                        ("load", tmp_node_val, tmp_addr_idx),
+                    ]
+                })
+
+
                 body.append(("debug", ("compare", tmp_node_val, (round, i, "node_val"))))
             
                 # 4. val = myhash(val ^ node_val)
-                body.append(("alu", ("^", tmp_val, tmp_val, tmp_node_val)))
+                body.append({
+                    "alu": [
+                        ("^", tmp_val, tmp_val, tmp_node_val)
+                    ],
+                    "load": [
+                        ("load", tmp_node_val_2unroll, tmp_addr_idx_1_1),
+                    ]
+                })
+                
                 body.extend(self.build_hash(tmp_val, tmp1, tmp2, round, i))
                 body.append(("debug", ("compare", tmp_val, (round, i, "hashed_val"))))
             
@@ -245,7 +264,6 @@ class KernelBuilder:
                 body.append({
                     "alu": [
                         ("+", tmp_addr_idx, self.scratch["forest_values_p"], tmp_idx),
-                        ("+", tmp_addr_idx_1_1, self.scratch["forest_values_p"], tmp_idx_2unroll),
                     ],
                     "store": [
                         ("store", tmp_addr_idx_3, tmp_idx),
@@ -257,15 +275,13 @@ class KernelBuilder:
 
                 # 1. idx = mem[inp_indices_p + i] -> done
                 # 2. val = mem[inp_values_p + i]  -> done
+                # 3. node_val = mem[forest_values_p + idx] -> done
                 
-                # 3. node_val = mem[forest_values_p + idx]
-                # body.append(("alu", ("+", tmp_addr_idx_1_1, self.scratch["forest_values_p"], tmp_idx_2unroll)))
-                
-                body.append(("load", ("load", tmp_node_val, tmp_addr_idx_1_1)))
-                body.append(("debug", ("compare", tmp_node_val, (round, i + 1, "node_val"))))
+                # body.append(("load", ("load", tmp_node_val, tmp_addr_idx_1_1)))
+                body.append(("debug", ("compare", tmp_node_val_2unroll, (round, i + 1, "node_val"))))
             
                 # 4. val = myhash(val ^ node_val)
-                body.append(("alu", ("^", tmp_val_2unroll, tmp_val_2unroll, tmp_node_val)))
+                body.append(("alu", ("^", tmp_val_2unroll, tmp_val_2unroll, tmp_node_val_2unroll)))
                 body.extend(self.build_hash(tmp_val_2unroll, tmp1, tmp2, round, i + 1))
                 body.append(("debug", ("compare", tmp_val_2unroll, (round, i + 1, "hashed_val"))))
             
